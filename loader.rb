@@ -19,7 +19,7 @@ options.database = ''
 options.command = ''
   
 opt_parser = OptionParser.new do |opts|
-  opts.banner = "Usage: cloader.rb [options]"
+  opts.banner = "Usage: loader.rb [options]"
 
   opts.on("-d", "--database DATABASE", "Load to the database eg: http://username:password@127.0.0.1:5984/testdb") do |db|
     options.database = db
@@ -141,7 +141,7 @@ end
 # id is of the form '_design/moo'
 # 
 def curl_put_ddoc(database_url, id, ddoc_text)
-  tmp_file = "/tmp/cloader_#{Kernel.rand}.tmp"
+  tmp_file = "/tmp/loader_#{Kernel.rand}.tmp"
   f = File.new(tmp_file,File::CREAT|File::TRUNC|File::RDWR, 0644)
   f.puts ddoc_text
   f.close
