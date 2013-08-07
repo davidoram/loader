@@ -9,6 +9,8 @@ Pre-requisites
 
 U*ix, ruby 1.9+, curl
 
+gem install yajl
+
 Usage
 -----
 

@@ -7,8 +7,7 @@ require 'ostruct'
 require 'base64'
 require 'fileutils'
 require 'erb'
-require "net/http"
-require "uri"
+require "json"
 require 'yajl'
 require 'tmpdir'
 
@@ -81,6 +80,9 @@ END_OF_SAMPLE
 DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
 {
   "_id" : "<%= id %>",
+  <% if rev %>
+    "_rev": "<%= rev %>",
+  <% end %>
   "views" : {
     <% views.each_index do |idx| %>
       <% view = views[idx] %>
@@ -103,7 +105,7 @@ DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
 END_OF_TEMPLATE
 
 DDOC_FILE_TEMPLATES = {
-  '_design/_id' => "design_/<%= project_dir %>",
+  '_design/_id' => "_design/<%= project_dir %>",
   '_design/views/foo/map.js' => sample_map_fn,
   '_design/views/foo/reduce.js' => sample_reduce_fn,
 }
@@ -146,15 +148,37 @@ def curl_put_ddoc(database_url, id, ddoc_text)
   f.puts ddoc_text
   f.close
   
-  output = `curl -X PUT #{database_url}/#{id} -d @#{tmp_file}`
+  output_json = `curl -X PUT #{database_url}/#{id} -d @#{tmp_file}`
   exit_status = $?
   if exit_status != 0
     puts "ERROR: Command returned #{exit_status}"
     puts "       curl -X PUT #{database_url}/#{id}  -d @#{tmp_file}"
-    puts "Output: #{output}"
+    puts "Output: #{output_json}"
+    exit 1
+  end
+  output = JSON.parse(output_json)
+  if !output.has_key? 'ok' or ! output['ok']
+    puts "ERROR: Couchdb returned error"
+    puts "Output: #{output_json}"
     exit 1
   end
   FileUtils.rm tmp_file
+end
+
+#
+# Return the revision # of a document or nil if none
+#
+def get_revision(database_url, id)
+  output_json = `curl -X GET #{database_url}/#{id}`
+  exit_status = $?
+  if exit_status != 0
+    puts "ERROR: Command returned #{exit_status}"
+    puts "       curl -X GET #{database_url}/#{id}"
+    puts "Output: #{output_json}"
+    exit 1
+  end
+  output = JSON.parse(output_json)
+  output['_rev']
 end
 
 #
@@ -166,7 +190,8 @@ def push_ddoc(project_dir, database_url)
   puts "Push design document project: #{project_dir} to #{database_url}"
 
   id = IO.binread(project_dir + File::SEPARATOR + "_design/_id").chomp
-  
+
+  rev = get_revision(database_url, id)
   # Views
   views = []
   Dir.glob(project_dir + File::SEPARATOR + "_design/views/*").each do |view_dir|
