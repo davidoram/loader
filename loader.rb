@@ -11,25 +11,42 @@ require "json"
 require 'yajl'
 require 'tmpdir'
 
-# The options specified on the command line will be collected in *options*.
-# We set default values here.
-options = OpenStruct.new
-options.database = ''
-options.command = ''
-  
-opt_parser = OptionParser.new do |opts|
-  opts.banner = "Usage: loader.rb [options]"
+DOCUMENT_TEMPLATE =<<END_OF_TEMPLATE
+{
+  "_id":"<%= id %>",
 
-  opts.on("-d", "--database DATABASE", "Load to the database eg: http://username:password@127.0.0.1:5984/testdb") do |db|
-    options.database = db
+  "name":"<%= ['dave','kezza','bob','phil','sue','george','mary','rangi','vanessa'].sample %>",
+  "hobbies": [
+    <% separator = '' %>
+    <% ['fishing','cycling','rugby','cricket','baseball','softball','reading','cinema','judo'].sample(3).each do |hobby| %>
+        <%= separator %>"<%= hobby %>"
+        <% separator = ',' %>
+    <% end %>  
+   ]
+}
+END_OF_TEMPLATE
+
+def create_skeleton_docs(files)
+  files.each do |a_file|
+    create_a_skeleton_doc a_file
   end
-
-  opts.on("-c", "--command COMMAND [arg]", "Run the command, which can one of 'push' which pushs to the server, 'ddoc' which cretes an empty design document project, pass the name of the new project.") do |cmd|
-    options.command = cmd
-  end
-
 end
-opt_parser.parse!(ARGV)
+
+# 
+# Create a skeleton (regular) document project
+#
+def create_a_skeleton_doc(filename)
+  if File.exists? filename
+    puts "Error: file '#{filename}' already exists, try a different name"
+    exit 1
+  end
+  id = filename.gsub /\.json$/, ''
+  puts "Created skeleton document : #{filename} with id: #{id}"
+  f = File.new(filename,  File::CREAT|File::TRUNC|File::RDWR, 0644)
+  f.puts(ERB.new(DOCUMENT_TEMPLATE).result(binding))
+  f.close
+end
+
 
 #
 # Valid subdirectories
@@ -40,16 +57,16 @@ DDOC_SUBDIRS = %w{ _design _design/views }
 # File templates are erb strings
 #
 sample_map_fn = <<END_OF_SAMPLE
-/* This is a sample view function */ 
+/* This is a sample view function - output all names */ 
 function(doc) {
-  if(doc.date && doc.title) {
-    emit(doc.date, doc.title);
+  if(doc.name) {
+    emit(doc.name);
   }
 }  
 END_OF_SAMPLE
 
 sample_reduce_fn = <<END_OF_SAMPLE
-/* This is a sample reduce function */ 
+/* This is a sample reduce function - summarises who has hobbies */ 
 function(doc) {
   if(doc.date && doc.title) {
     emit(doc.date, doc.title);
@@ -57,25 +74,7 @@ function(doc) {
 }  
 END_OF_SAMPLE
 
-sample_document_1 =<<END_OF_SAMPLE
-{
-  "_id":"biking",
 
-  "title":"Biking",
-  "body":"My biggest hobby is mountainbiking. The other day...",
-  "date":"2009/01/30 18:04:11"
-}
-END_OF_SAMPLE
-
-sample_document_2 =<<END_OF_SAMPLE
-{
-  "_id":"bought-a-cat",
-
-  "title":"Bought a Cat",
-  "body":"I went to the the pet store earlier and brought home a little kitty...",
-  "date":"2009/02/17 21:13:39"
-}
-END_OF_SAMPLE
 
 DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
 {
@@ -111,7 +110,7 @@ DDOC_FILE_TEMPLATES = {
 }
 
 # 
-# Create a skeleton project
+# Create a skeleton design document project
 #
 def create_skeleton_ddoc(project_dir)
   if Dir.exists? project_dir
@@ -127,32 +126,23 @@ def create_skeleton_ddoc(project_dir)
   end
 end
 
-# 
-# Push the project to url
-#
-def push_project(project_dir, database_url)
-  if !Dir.exists? project_dir + File::SEPARATOR + DDOC_SUBDIRS[0]
-    puts "Error: #{project_dir + File::SEPARATOR + SUBDIRS[0]} doesnt exist, try passing in the project"
-    exit 1
-  end
-  push_ddoc(project_dir, database_url)
-end
 
 #
-# Use curl to push the ddoc up to the server
-# id is of the form '_design/moo'
+# Use curl to push a document up to the server
+# id is of the form '_design/moo' for a design document, or 'abcd' for a regulsr document
 # 
-def curl_put_ddoc(database_url, id, ddoc_text)
+def curl_put(database_url, id, document_text)
   tmp_file = "/tmp/loader_#{Kernel.rand}.tmp"
   f = File.new(tmp_file,File::CREAT|File::TRUNC|File::RDWR, 0644)
-  f.puts ddoc_text
+  f.puts document_text
   f.close
   
-  output_json = `curl -X PUT #{database_url}/#{id} -d @#{tmp_file}`
+  #puts "curl -s -X PUT #{database_url}/#{id} -d @#{tmp_file}"
+  output_json = `curl -s -X PUT #{database_url}/#{id} -d @#{tmp_file}`
   exit_status = $?
   if exit_status != 0
     puts "ERROR: Command returned #{exit_status}"
-    puts "       curl -X PUT #{database_url}/#{id}  -d @#{tmp_file}"
+    puts "       curl -s -X PUT #{database_url}/#{id}  -d @#{tmp_file}"
     puts "Output: #{output_json}"
     exit 1
   end
@@ -169,11 +159,11 @@ end
 # Return the revision # of a document or nil if none
 #
 def get_revision(database_url, id)
-  output_json = `curl -X GET #{database_url}/#{id}`
+  output_json = `curl -s -X GET #{database_url}/#{id}`
   exit_status = $?
   if exit_status != 0
     puts "ERROR: Command returned #{exit_status}"
-    puts "       curl -X GET #{database_url}/#{id}"
+    puts "       curl -s -X GET #{database_url}/#{id}"
     puts "Output: #{output_json}"
     exit 1
   end
@@ -185,6 +175,12 @@ end
 # Push a design document project
 #
 def push_ddoc(project_dir, database_url)
+
+  if !Dir.exists? project_dir + File::SEPARATOR + DDOC_SUBDIRS[0]
+    puts "Error: #{project_dir + File::SEPARATOR + SUBDIRS[0]} doesnt exist, try passing in the project"
+    exit 1
+  end
+
   # Build up project structure, then push it as a single design doc
   project = {}
   puts "Push design document project: #{project_dir} to #{database_url}"
@@ -207,23 +203,88 @@ def push_ddoc(project_dir, database_url)
     views << view
   end
   #puts views.inspect
-  curl_put_ddoc(database_url, id, ERB.new(DESIGN_DOC_TEMPLATE).result(binding))
+  curl_put(database_url, id, ERB.new(DESIGN_DOC_TEMPLATE).result(binding))
 end
+
+#
+# Push bunch of files
+#
+def push_doc(files, database_url)
+  # Push each file
+  files.each do |a_file|
+    push_a_doc a_file, database_url
+  end
+end
+
+#
+# Push a single document file
+#
+def push_a_doc(file, database_url)
+  content = IO.binread(file)
+  doc = JSON.parse(content)
+  if !doc.has_key? '_id'
+    puts "ERROR: Document #{file} missing '_id'"
+    exit 1
+  end
+  puts "Push document : #{file} to #{database_url}/#{doc['_id']}"
+  rev = get_revision(database_url, doc['_id'])
+  
+  # If got a revision in the db, place in back in the doc so we can update
+  if rev
+    doc['_rev'] = rev
+    content = JSON.generate doc
+  end
+  curl_put(database_url, doc['_id'], content)
+end
+
+
+
+# The options specified on the command line will be collected in *options*.
+# We set default values here.
+options = OpenStruct.new
+options.database = ''
+options.command = ''
+  
+opt_parser = OptionParser.new do |opts|
+  opts.banner = "Usage: loader.rb [options]"
+
+  opts.on("-d", "--database DATABASE", "Load to the database eg: http://username:password@127.0.0.1:5984/testdb") do |db|
+    options.database = db
+  end
+
+  opts.on("-c", "--command COMMAND [arg]", "Run the command, which can one of:" +
+                                           "\n\t'ddoc dir' to creates an empty design document project, pass the dir to create," +
+                                           "\n\t'pddoc dir' push the design document in dir to the server ," +
+                                           "\n\t'doc file [file ...]' to create an empty document, in file" +
+                                           "\n\t'pdoc  [file ...]' push documents to the server ,") do |cmd|
+    options.command = cmd
+  end
+
+end
+opt_parser.parse!(ARGV)
+
   
 #
 # Start work
 #
 case options.command
-when 'push'
+when 'pddoc'
   if options.database == ''
     puts "Error: Missing database argument"
     exit 1
   end
   if ARGV.size == 0
-    push_project('.', options.database)
+    push_ddoc('.', options.database)
   else
-    push_project(ARGV[0], options.database)
+    push_ddoc(ARGV[0], options.database)
   end
+
+when 'pdoc'
+  if options.database == ''
+    puts "Error: Missing database argument"
+    exit 1
+  end
+  push_doc(ARGV, options.database)
 
 when 'ddoc'
   if ARGV.size != 1
@@ -231,6 +292,12 @@ when 'ddoc'
     exit 1
   end
   create_skeleton_ddoc(ARGV[0])
+when 'doc'
+  if ARGV.size < 1
+    puts "Error: Missing file(s) arguments"
+    exit 1
+  end
+  create_skeleton_docs(ARGV)
 else
   puts "Error: Missing/Invalid command. Run #{__FILE__} --help for help"
 end
