@@ -59,21 +59,9 @@ DDOC_SUBDIRS = %w{ _design _design/views }
 sample_map_fn = <<END_OF_SAMPLE
 /* This is a sample view function - output all names */ 
 function(doc) {
-  if(doc.name) {
-    emit(doc.name);
-  }
+  emit(doc.name);
 }  
 END_OF_SAMPLE
-
-sample_reduce_fn = <<END_OF_SAMPLE
-/* This is a sample reduce function - summarises who has hobbies */ 
-function(doc) {
-  if(doc.date && doc.title) {
-    emit(doc.date, doc.title);
-  }
-}  
-END_OF_SAMPLE
-
 
 
 DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
@@ -82,31 +70,26 @@ DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
   <% if rev %>
     "_rev": "<%= rev %>",
   <% end %>
+  "language": "javascript",
   "views" : {
+    <% view_separator = '' %>
     <% views.each_index do |idx| %>
+      <%= view_separator %>
       <% view = views[idx] %>
-      <% view[:separator] = '' %>
       "<%= view[:name] %>": {
       
       <% if view.has_key? :map_fn %>
-        "map" : <%= view[:map_fn] %> <% view[:separator] = ',' %>
+        "map" : <%= view[:map_fn] %> 
       <% end %>
-      
-      <% if view.has_key? :reduce_fn %>
-        <%= view[:separator] %>
-        <% view[:separator] = '' %>
-        "reduce" : <%= view[:reduce_fn] %> <% view[:separator] = ',' %>
-      <% end %>
-      }<% if idx < (views.size - 1) %>,<% end %>
-    <% end %>
+      <% view_separator = ',' %>
+    <% end %> }
   }
 }
 END_OF_TEMPLATE
 
 DDOC_FILE_TEMPLATES = {
   '_design/_id' => "_design/<%= project_dir %>",
-  '_design/views/foo/map.js' => sample_map_fn,
-  '_design/views/foo/reduce.js' => sample_reduce_fn,
+  '_design/views/all/map.js' => sample_map_fn,
 }
 
 # 
@@ -149,6 +132,7 @@ def curl_put(database_url, id, document_text)
   output = JSON.parse(output_json)
   if !output.has_key? 'ok' or ! output['ok']
     puts "ERROR: Couchdb returned error"
+    puts "Sending contents of : #{tmp_file}"
     puts "Output: #{output_json}"
     exit 1
   end
@@ -195,10 +179,6 @@ def push_ddoc(project_dir, database_url)
     map_filename = view_dir + File::SEPARATOR + "map.js" 
     if File.file? map_filename
       view[:map_fn] = str = Yajl::Encoder.encode(IO.binread(map_filename))
-    end
-    reduce_filename = view_dir + File::SEPARATOR + "reduce.js" 
-    if File.file? reduce_filename
-      view[:reduce_fn] = Yajl::Encoder.encode(IO.binread(reduce_filename))
     end
     views << view
   end
