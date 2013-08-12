@@ -39,4 +39,4 @@ and then upload it
 
 Then test out your design document map function
 
-	curl -X GET  http://127.0.0.1:5984/testdb/_design/foo/_view/foo
+	curl -X GET  http://127.0.0.1:5984/testdb/_design/foo/_view/all
