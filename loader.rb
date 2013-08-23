@@ -14,8 +14,7 @@ require 'tmpdir'
 DOCUMENT_TEMPLATE =<<END_OF_TEMPLATE
 {
   "_id":"<%= id %>",
-
-  "name":"<%= ['dave','kezza','bob','phil','sue','george','mary','rangi','vanessa'].sample %>",
+  "pet" : "<%= ['dog','cat'].sample %>",
   "hobbies": [
     <% separator = '' %>
     <% ['fishing','cycling','rugby','cricket','baseball','softball','reading','cinema','judo'].sample(3).each do |hobby| %>
@@ -56,11 +55,39 @@ DDOC_SUBDIRS = %w{ _design _design/views }
 #
 # File templates are erb strings
 #
-sample_map_fn = <<END_OF_SAMPLE
-/* This is a sample view function - output all names */ 
+
+PET_MAP_FN_TEMPLATE = <<END_OF_SAMPLE
+/* 
+ * This is a sample view function - output each person with key being whether they prefer dogs or cats
+ */ 
 function(doc) {
-  emit(doc.name);
-}  
+  if(doc.pet) {
+    emit(doc.pet, null);
+  }
+}
+END_OF_SAMPLE
+
+HOBBIES_MAP_FN_TEMPLATE = <<END_OF_SAMPLE
+/* 
+ * This is a sample view function - output 1 row for each hobby a person has 
+ */ 
+function(doc) {
+  if(doc.hobbies.length > 0) {
+    for(var idx in doc.hobbies) {
+      emit(doc.hobbies[idx], 1);
+    }
+  }
+}
+END_OF_SAMPLE
+
+HOBBIES_REDUCE_FN_TEMPLATE = <<END_OF_SAMPLE
+/* 
+  This is a sample reduce function. 
+  Outputs each hobby with count of documents that use them 
+*/ 
+function(keys, values) {
+  return sum(values);
+}
 END_OF_SAMPLE
 
 
@@ -74,22 +101,22 @@ DESIGN_DOC_TEMPLATE=<<END_OF_TEMPLATE
   "views" : {
     <% view_separator = '' %>
     <% views.each_index do |idx| %>
-      <%= view_separator %>
+      <%= view_separator %><% view_separator = ',' %>
       <% view = views[idx] %>
       "<%= view[:name] %>": {
-      
-      <% if view.has_key? :map_fn %>
-        "map" : <%= view[:map_fn] %> 
-      <% end %>
-      <% view_separator = ',' %>
-    <% end %> }
+        <% if view.has_key? :map_fn %>"map" : <%= view[:map_fn] %><% end %>
+      <% if view.has_key? :reduce_fn %>,"reduce" : <%= view[:reduce_fn] %><% end %>
+      }
+    <% end %> 
   }
 }
 END_OF_TEMPLATE
 
 DDOC_FILE_TEMPLATES = {
   '_design/_id' => "_design/<%= project_dir %>",
-  '_design/views/all/map.js' => sample_map_fn,
+  '_design/views/pet/map.js' => PET_MAP_FN_TEMPLATE,
+  '_design/views/hobbies/map.js' => HOBBIES_MAP_FN_TEMPLATE,
+  '_design/views/hobbies/reduce.js' => HOBBIES_REDUCE_FN_TEMPLATE,
 }
 
 # 
@@ -179,6 +206,10 @@ def push_ddoc(project_dir, database_url)
     map_filename = view_dir + File::SEPARATOR + "map.js" 
     if File.file? map_filename
       view[:map_fn] = str = Yajl::Encoder.encode(IO.binread(map_filename))
+    end
+    reduce_filename = view_dir + File::SEPARATOR + "reduce.js" 
+    if File.file? reduce_filename
+      view[:reduce_fn] = str = Yajl::Encoder.encode(IO.binread(reduce_filename))
     end
     views << view
   end
