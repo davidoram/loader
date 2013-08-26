@@ -62,7 +62,7 @@ PET_MAP_FN_TEMPLATE = <<END_OF_SAMPLE
  */ 
 function(doc) {
   if(doc.pet) {
-    emit(doc.pet, null);
+    emit("pet", doc.pet);
   }
 }
 END_OF_SAMPLE
@@ -72,10 +72,10 @@ HOBBIES_MAP_FN_TEMPLATE = <<END_OF_SAMPLE
  * This is a sample view function - output 1 row for each hobby a person has 
  */ 
 function(doc) {
-  if(doc.hobbies.length > 0) {
-    for(var idx in doc.hobbies) {
-      emit(doc.hobbies[idx], 1);
-    }
+  if(doc.hobbies) {
+    doc.hobbies.forEach(function(hobby) {
+      emit(hobby, 1);
+    });
   }
 }
 END_OF_SAMPLE
@@ -114,7 +114,7 @@ END_OF_TEMPLATE
 
 DDOC_FILE_TEMPLATES = {
   '_design/_id' => "_design/<%= project_dir %>",
-  '_design/views/pet/map.js' => PET_MAP_FN_TEMPLATE,
+  '_design/views/pets/map.js' => PET_MAP_FN_TEMPLATE,
   '_design/views/hobbies/map.js' => HOBBIES_MAP_FN_TEMPLATE,
   '_design/views/hobbies/reduce.js' => HOBBIES_REDUCE_FN_TEMPLATE,
 }
