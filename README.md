@@ -37,7 +37,10 @@ and then upload it
 	loader.rb -d http://username:password@127.0.0.1:5984/testdb -c pdoc bob.json
 
 
-Then test out your design document map functions
+Then test out your design document map functions:
+
+	curl -X GET  http://127.0.0.1:5984/testdb/_design/foo/_view/pets
+	
+and the map + reduce functions:
 
 	curl -X GET  http://127.0.0.1:5984/testdb/_design/foo/_view/hobbies?group=true
-	curl -X GET  http://127.0.0.1:5984/testdb/_design/foo/_view/pets
