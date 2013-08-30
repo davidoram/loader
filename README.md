@@ -34,7 +34,7 @@ To create an empty documents 'bob.json' & 'sue.json'
 
 and then upload it 
 
-	loader.rb -d http://username:password@127.0.0.1:5984/testdb -c pdoc bob.json
+	loader.rb -d http://username:password@127.0.0.1:5984/testdb -c pdoc bob.json sue.json
 
 
 Then test out your design document map functions:
